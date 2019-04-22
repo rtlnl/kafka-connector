@@ -42,6 +42,19 @@ Deploy a function with a `topic` annotation:
 $ faas store deploy figlet --annotation topic="faas-request" --gateway <faas-netes-gateway-url>
 ```
 
+If deploying via a `stack.yml` then add an annotation key called `topic` with a value of `faas-request`.
+
+```yaml
+  my-function:
+    lang: python
+    handler: ./my-function
+    image: <username>/my-function:latest
+    annotations:
+      topic: faas-request
+```
+
+For further details, please see the [YAML Reference](https://docs.openfaas.com/reference/yaml/#function-annotations) section of the [OpenFaaS Docs](https://docs.openfaas.com/)
+
 Deploy Kafka:
 
 You can run the zookeeper, kafka-broker and kafka-connector pods with:
