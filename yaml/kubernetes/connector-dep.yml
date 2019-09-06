@@ -14,6 +14,8 @@ spec:
       component: kafka-connector
   template:
     metadata:
+      annotations:
+        prometheus.io.scrape: "false"
       labels:
         app: kafka
         component: kafka-connector
