@@ -46,11 +46,9 @@ If deploying via a `stack.yml` then add an annotation key called `topic` with a 
 
 ```yaml
   my-function:
-    lang: python
-    handler: ./my-function
-    image: <username>/my-function:latest
+...
     annotations:
-      topic: faas-request
+      topic: payment
 ```
 
 For further details, please see the [YAML Reference](https://docs.openfaas.com/reference/yaml/#function-annotations) section of the [OpenFaaS Docs](https://docs.openfaas.com/)
