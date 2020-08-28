@@ -19,10 +19,16 @@ import (
 
 var saramaKafkaProtocolVersion = sarama.V0_10_2_0
 
+type authConfig struct {
+	Username string
+	Password string
+}
+
 type connectorConfig struct {
 	*types.ControllerConfig
-	Topics []string
-	Broker string
+	Topics     []string
+	Broker     string
+	AuthConfig *authConfig
 }
 
 const (
@@ -32,35 +38,43 @@ const (
 func main() {
 
 	credentials := types.GetCredentials()
+
 	config := buildConnectorConfig()
 
 	controller := types.NewController(credentials, config.ControllerConfig)
 
 	controller.BeginMapBuilder()
 
-	brokers := []string{config.Broker}
+	brokers := strings.Split(config.Broker, ",")
 	waitForBrokers(brokers, config, controller)
 
 	makeConsumer(brokers, config, controller)
 }
 
 func waitForBrokers(brokers []string, config connectorConfig, controller *types.Controller) {
-
 	var client sarama.Client
 	var err error
 
+	cfg := sarama.NewConfig()
+	cfg.Version = saramaKafkaProtocolVersion
+	if config.AuthConfig != nil {
+		cfg.Net.SASL.Enable = true
+		cfg.Net.SASL.User = config.AuthConfig.Username
+		cfg.Net.SASL.Password = config.AuthConfig.Password
+	}
+
 	for {
 		if len(controller.Topics()) > 0 {
-			client, err = sarama.NewClient(brokers, nil)
+			client, err = sarama.NewClient(brokers, cfg)
 			if client != nil && err == nil {
 				break
 			}
 			if client != nil {
 				client.Close()
 			}
+			fmt.Println(err)
 			fmt.Println("Wait for brokers ("+config.Broker+") to come up.. ", brokers)
 		}
-
 		time.Sleep(1 * time.Second)
 	}
 }
@@ -74,6 +88,12 @@ func makeConsumer(brokers []string, config connectorConfig, controller *types.Co
 	cConfig.Group.Return.Notifications = true
 	cConfig.Group.Session.Timeout = 6 * time.Second
 	cConfig.Group.Heartbeat.Interval = 2 * time.Second
+
+	if config.AuthConfig != nil {
+		cConfig.Net.SASL.Enable = true
+		cConfig.Net.SASL.User = config.AuthConfig.Username
+		cConfig.Net.SASL.Password = config.AuthConfig.Password
+	}
 
 	group := "faas-kafka-queue-workers"
 
@@ -99,19 +119,13 @@ func makeConsumer(brokers []string, config connectorConfig, controller *types.Co
 					msg.Topic,
 					msg.Partition,
 					string(msg.Value))
-
 				controller.Invoke(msg.Topic, &msg.Value)
-
 				consumer.MarkOffset(msg, "") // mark message as processed
 			}
 		case err = <-consumer.Errors():
-
 			fmt.Println("consumer error: ", err)
-
 		case ntf := <-consumer.Notifications():
-
 			fmt.Printf("Rebalanced: %+v\n", ntf)
-
 		}
 	}
 }
@@ -121,6 +135,22 @@ func buildConnectorConfig() connectorConfig {
 	broker := "kafka:9092"
 	if val, exists := os.LookupEnv("broker_host"); exists {
 		broker = val
+	}
+
+	consumerUsername := ""
+	if val, exists := os.LookupEnv("consumer_username"); exists {
+		consumerUsername = val
+	}
+
+	consumerPassword := ""
+	if val, exists := os.LookupEnv("consumer_password"); exists {
+		consumerPassword = val
+	}
+
+	ac := &authConfig{}
+	if consumerUsername != "" && consumerPassword != "" {
+		ac.Username = consumerUsername
+		ac.Password = consumerPassword
 	}
 
 	topics := []string{}
@@ -189,7 +219,8 @@ func buildConnectorConfig() connectorConfig {
 			TopicAnnotationDelimiter: delimiter,
 			AsyncFunctionInvocation:  asynchronousInvocation,
 		},
-		Topics: topics,
-		Broker: broker,
+		Topics:     topics,
+		Broker:     broker,
+		AuthConfig: ac,
 	}
 }
